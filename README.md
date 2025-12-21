@@ -21,11 +21,11 @@
 TorForge is a production-ready transparent Tor proxy that routes all system traffic through the Tor network. Unlike traditional Tor setups, TorForge operates at the kernel level using iptables, ensuring zero application configuration and complete traffic capture.
 
 ### Key Highlights
-- **Zero-config transparent proxying** — Works with any application
-- **10,000+ lines of Go** — Production-quality codebase
-- **10 internal packages** — Modular architecture
-- **AI-powered optimization** — Smart circuit selection and split-tunneling
-- **Post-quantum ready** — CRYSTALS-Kyber768 encryption
+- **Zero-config transparent proxying** - Works with any application
+- **10,000+ lines of Go** - Production-quality codebase
+- **10 internal packages** - Modular architecture
+- **AI-powered optimization** - Smart circuit selection and split-tunneling
+- **Post-quantum ready** - CRYSTALS-Kyber768 encryption
 
 ---
 
@@ -425,7 +425,7 @@ make clean
 
 ## 📜 License
 
-MIT License — See [LICENSE](LICENSE)
+MIT License - See [LICENSE](LICENSE)
 
 ---
 
