@@ -1,0 +1,177 @@
+# TorForge Configuration File
+# Complete reference for all configuration options
+
+# Tor Configuration
+tor:
+  # Path to Tor binary (default: "tor")
+  binary: tor
+  
+  # Tor data directory
+  data_dir: /var/lib/torforge
+  
+  # Control port for Tor control protocol
+  control_port: 9051
+  
+  # SOCKS proxy port
+  socks_port: 9050
+  
+  # Transparent proxy port
+  trans_port: 9040
+  
+  # DNS port (resolves through Tor)
+  dns_port: 5353
+  
+  # Use existing system Tor instance instead of starting our own
+  use_system_tor: false
+  
+  # Preferred exit node countries (comma-separated country codes)
+  # Example: "{us},{de},{nl}"
+  exit_nodes: ""
+  
+  # Excluded exit node countries
+  exclude_exit_nodes: ""
+
+# Proxy Configuration
+proxy:
+  # Enable transparent proxying
+  enabled: true
+  
+  # Firewall mode: "iptables" or "nftables"
+  mode: iptables
+  
+  # Enable IPv6 support
+  ipv6: false
+  
+  # Block all UDP traffic (except DNS)
+  block_udp: true
+  
+  # Network interfaces to bypass (local traffic)
+  interface_bypass:
+    - lo
+
+# Bypass Rules
+bypass:
+  # Enable bypass rules
+  enabled: true
+  
+  # Domain patterns to bypass (glob patterns)
+  domains:
+    - "*.local"
+    - "*.localhost"
+    - "*.internal"
+    # Add your own:
+    # - "*.htb"         # Hack The Box
+    # - "*.thm"         # TryHackMe
+  
+  # CIDR ranges to bypass
+  cidrs:
+    - "127.0.0.0/8"     # Loopback
+    - "10.0.0.0/8"      # Private Class A
+    - "172.16.0.0/12"   # Private Class B
+    - "192.168.0.0/16"  # Private Class C
+    - "169.254.0.0/16"  # Link-local
+  
+  # Protocols to bypass
+  protocols:
+    # - icmp           # Uncomment to allow ICMP
+    # - ntp            # Uncomment to allow NTP
+  
+  # Applications to bypass (process names)
+  applications: []
+  
+  # GeoIP-based bypass
+  geoip:
+    enabled: false
+    database_path: /usr/share/GeoIP/GeoLite2-Country.mmdb
+    countries: []
+    # countries:
+    #   - US           # Bypass traffic to US
+    #   - IN           # Bypass traffic to India
+  
+  # Custom bypass rules
+  custom_rules: []
+  # custom_rules:
+  #   - name: my-vpn
+  #     type: cidr
+  #     pattern: "10.8.0.0/24"
+  #     action: bypass
+  #     description: "VPN network"
+
+# Circuit Management
+circuits:
+  # Maximum concurrent circuits
+  max_circuits: 4
+  
+  # Circuit rotation interval (time-based)
+  rotation_interval: 10m
+  
+  # Circuit rotation threshold (traffic-based, bytes)
+  rotation_bytes: 104857600  # 100MB
+  
+  # Health check interval
+  health_check_interval: 30s
+  
+  # Per-domain circuit isolation
+  per_domain_isolation: true
+  
+  # Per-application circuit isolation
+  per_app_isolation: false
+
+# Monitoring & Logging
+monitoring:
+  # Enable monitoring
+  enabled: true
+  
+  # Prometheus metrics port
+  prometheus_port: 9100
+  
+  # Log file path (empty for no file logging)
+  log_file: /var/log/torforge/torforge.log
+  
+  # Log level: debug, info, warn, error
+  log_level: info
+  
+  # Audit log path (JSONL format)
+  audit_log: /var/log/torforge/audit.jsonl
+  
+  # Enable real-time leak detection
+  leak_detection: true
+  
+  # Enable traffic analytics
+  traffic_analytics: true
+
+# Security Settings
+security:
+  # Block all non-Tor traffic if Tor fails
+  kill_switch: true
+  
+  # Enable DNS leak protection
+  dns_leak_protection: true
+  
+  # Enable exit node reputation checking
+  exit_node_reputation: false
+  
+  # Enable traffic fingerprinting resistance
+  fingerprint_resistance: true
+  
+  # Enable sandbox (seccomp)
+  sandbox_enabled: false
+  
+  # Use network namespaces for isolation
+  network_namespace: false
+
+# API Server
+api:
+  # Enable REST/WebSocket API
+  enabled: false
+  
+  # Listen address
+  listen_addr: "127.0.0.1:8080"
+  
+  # Authentication token (required if API enabled)
+  auth_token: ""
+  
+  # Enable TLS
+  tls_enabled: false
+  tls_cert_file: ""
+  tls_key_file: ""
