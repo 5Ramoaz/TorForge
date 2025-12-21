@@ -422,9 +422,12 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	port := strings.TrimSpace(string(data))
 
-	// Read authentication cookie
+	// Read authentication cookie (optional - some setups don't use it)
 	cookieFile := "/var/lib/torforge/control_auth_cookie"
-	cookie, _ := os.ReadFile(cookieFile)
+	cookie, err := os.ReadFile(cookieFile)
+	if err != nil {
+		cookie = nil // Continue without cookie authentication
+	}
 
 	// Connect to Tor control port
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 5*time.Second)
@@ -650,8 +653,8 @@ func runStop(cmd *cobra.Command, args []string) error {
 	exec.Command("killall", "tor").Run()
 
 	// Load config and create proxy to access cleanup
-	cfg, _ := config.Load(cfgFile)
-	if cfg == nil {
+	cfg, err := config.Load(cfgFile)
+	if err != nil || cfg == nil {
 		cfg = config.DefaultConfig()
 	}
 

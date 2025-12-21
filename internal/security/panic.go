@@ -274,7 +274,10 @@ func (d *DeadManSwitch) emergencyActions() {
 
 	// 4. Clear browser data (common locations)
 	log.Debug().Msg("clearing traces...")
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "/root" // Fallback to root home
+	}
 	clearPaths := []string{
 		homeDir + "/.cache/mozilla/firefox",
 		homeDir + "/.cache/chromium",
@@ -306,7 +309,10 @@ func (d *DeadManSwitch) emergencyActions() {
 // EmergencySignal sends emergency signal for immediate shutdown
 func (d *DeadManSwitch) EmergencySignal() {
 	// Send SIGTERM to self for graceful shutdown attempt
-	p, _ := os.FindProcess(os.Getpid())
+	p, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		os.Exit(1) // Emergency exit if can't find own process
+	}
 	p.Signal(syscall.SIGTERM)
 
 	// If still running after 1 second, force SIGKILL

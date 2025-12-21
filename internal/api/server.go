@@ -378,9 +378,10 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request) {
 			if s.handlers.OnGetStatus != nil {
 				status, err := s.handlers.OnGetStatus()
 				if err == nil {
-					data, _ := json.Marshal(status)
-					fmt.Fprintf(w, "event: status\ndata: %s\n\n", data)
-					flusher.Flush()
+					if data, err := json.Marshal(status); err == nil {
+						fmt.Fprintf(w, "event: status\ndata: %s\n\n", data)
+						flusher.Flush()
+					}
 				}
 			}
 		}

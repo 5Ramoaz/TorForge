@@ -190,20 +190,27 @@ func (d *DecoyTrafficGenerator) makeDecoyRequest(url string) {
 
 	// Read some of the response to generate traffic
 	buf := make([]byte, 4096)
-	n, _ := resp.Body.Read(buf)
-	atomic.AddInt64(&d.bytesGenerated, int64(n))
+	if n, err := resp.Body.Read(buf); err == nil {
+		atomic.AddInt64(&d.bytesGenerated, int64(n))
+	}
 }
 
 // randomTarget picks a random decoy target
 func (d *DecoyTrafficGenerator) randomTarget() string {
-	n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(decoyTargets))))
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(decoyTargets))))
+	if err != nil {
+		return decoyTargets[0] // Fallback to first target
+	}
 	return decoyTargets[n.Int64()]
 }
 
 // randomDuration returns random duration in range
 func (d *DecoyTrafficGenerator) randomDuration(min, max time.Duration) time.Duration {
 	diff := max - min
-	n, _ := rand.Int(rand.Reader, big.NewInt(int64(diff)))
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(diff)))
+	if err != nil {
+		return min + diff/2 // Fallback to midpoint
+	}
 	return min + time.Duration(n.Int64())
 }
 
@@ -216,7 +223,10 @@ func (d *DecoyTrafficGenerator) randomUserAgent() string {
 		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
 		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 	}
-	n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(userAgents))))
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(userAgents))))
+	if err != nil {
+		return userAgents[0] // Fallback to first user agent
+	}
 	return userAgents[n.Int64()]
 }
 
