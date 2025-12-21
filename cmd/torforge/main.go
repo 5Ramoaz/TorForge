@@ -449,21 +449,28 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Get circuit status
 	fmt.Fprintf(conn, "GETINFO circuit-status\r\n")
-	n, _ := conn.Read(reader)
-	circuitData := string(reader[:n])
-	circuitCount := strings.Count(circuitData, " BUILT ")
+	circuitData := ""
+	circuitCount := 0
+	if n, err := conn.Read(reader); err == nil {
+		circuitData = string(reader[:n])
+		circuitCount = strings.Count(circuitData, " BUILT ")
+	}
 
 	// Get bootstrap/circuit-established status (more reliable)
 	fmt.Fprintf(conn, "GETINFO status/circuit-established\r\n")
-	n, _ = conn.Read(reader)
-	circuitEstablished := string(reader[:n])
+	circuitEstablished := ""
+	if n, err := conn.Read(reader); err == nil {
+		circuitEstablished = string(reader[:n])
+	}
 	// If circuits are established OR we have BUILT circuits, we're active
 	bootstrapped := strings.Contains(circuitEstablished, "=1") || circuitCount > 0
 
 	// Get uptime
 	fmt.Fprintf(conn, "GETINFO uptime\r\n")
-	n, _ = conn.Read(reader)
-	uptimeInfo := string(reader[:n])
+	uptimeInfo := ""
+	if n, err := conn.Read(reader); err == nil {
+		uptimeInfo = string(reader[:n])
+	}
 	var uptimeStr string
 	if idx := strings.Index(uptimeInfo, "250-uptime="); idx != -1 {
 		start := idx + 11
@@ -598,8 +605,10 @@ func runNewCircuit(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Fprintf(conn, "AUTHENTICATE\r\n")
 	}
-	n, _ := conn.Read(buf)
-	authResponse := string(buf[:n])
+	authResponse := ""
+	if n, err := conn.Read(buf); err == nil {
+		authResponse = string(buf[:n])
+	}
 
 	if !strings.Contains(authResponse, "250 OK") {
 		// Fallback: send SIGHUP
@@ -610,8 +619,10 @@ func runNewCircuit(cmd *cobra.Command, args []string) error {
 
 	// Request new identity
 	fmt.Fprintf(conn, "SIGNAL NEWNYM\r\n")
-	n, _ = conn.Read(buf)
-	response := string(buf[:n])
+	response := ""
+	if n, err := conn.Read(buf); err == nil {
+		response = string(buf[:n])
+	}
 
 	if strings.Contains(response, "250 OK") {
 		fmt.Println("✅ New circuit requested - exit IP will change")
