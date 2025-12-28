@@ -45,7 +45,7 @@ TorForge is a transparent Tor proxy that routes all system traffic through the T
 ### 🔐 Advanced Security
 | Feature | Description |
 |---------|-------------|
-| **Post-Quantum Encryption** | CRYSTALS-Kyber768 (NIST Level 3) — Future-proof against quantum computers |
+| **Post-Quantum Encryption** | CRYSTALS-Kyber768 encrypts locally saved data (ML weights, cache) |
 | **Steganography Mode** | Traffic mimics YouTube/Netflix streaming to defeat DPI |
 | **Decoy Traffic** | Injects fake requests to frustrate traffic analysis |
 | **Dead Man's Switch** | Panic key for instant emergency shutdown with trace wiping |
@@ -246,7 +246,8 @@ sudo torforge tor [flags]
 | Flag | Short | Description | Default |
 |------|-------|-------------|---------|
 | `--circuits` | `-n` | Number of concurrent circuits | 4 |
-| `--post-quantum` | | CRYSTALS-Kyber768 encryption | off |
+| `--post-quantum` | | Enable post-quantum encryption for local data | off |
+| `--pq-password` | | Password for decryptable file encryption | none |
 | `--rotate-circuit` | | Auto-rotate every N minutes | 0 |
 | `--race` | | Race circuits on startup, use fastest | off |
 | `--race-circuits` | | Number of circuits to race | 5 |
@@ -360,16 +361,24 @@ Performs comprehensive tests:
 
 ### Post-Quantum Encryption
 
-Uses **CRYSTALS-Kyber768** from Cloudflare's CIRCL library:
-- NIST Level 3 security
-- 192-bit quantum resistant
-- AES-256-GCM symmetric layer
-- New keys each session
+Uses **CRYSTALS-Kyber768** from Cloudflare's CIRCL library to encrypt locally stored data:
+- Encrypts session stats (exit IPs used, AI recommendations)
+- NIST Level 3 security (192-bit quantum resistant)
+- Optional password for decryptable files (`--pq-password`)
+
+> **Note:** This does NOT encrypt network traffic (Tor already handles that). It protects your local data at rest.
+
+**With password:**
+```bash
+sudo torforge tor --post-quantum --pq-password "MySecret" -n 8
+# Files can be decrypted later with same password
+```
 
 ```
 🧅 TorForge Active
    🔐 Post-Quantum: CRYSTALS-Kyber768 ACTIVE
-   📊 NIST Level: 3 | Key ID: a1b2c3d4e5f6g7h8
+   📊 NIST Level: 3 | Key ID: a1b2c3d4
+   🔑 Password encryption: ENABLED
 ```
 
 ---

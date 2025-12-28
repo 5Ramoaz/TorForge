@@ -98,6 +98,13 @@ var installCmd = &cobra.Command{
 	RunE:  runInstallSystemd,
 }
 
+var decryptCmd = &cobra.Command{
+	Use:   "decrypt",
+	Short: "Decrypt encrypted session files",
+	Long:  "Decrypts files encrypted with post-quantum encryption (Argon2id + AES-256-GCM).",
+	RunE:  runDecrypt,
+}
+
 func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default: /etc/torforge/torforge.yaml)")
@@ -114,6 +121,7 @@ func init() {
 	torCmd.Flags().BoolP("daemon", "d", false, "run as daemon")
 	torCmd.Flags().Bool("auto-bridge", false, "automatically discover and use bridges if Tor is blocked")
 	torCmd.Flags().Bool("post-quantum", false, "enable post-quantum encryption layer (CRYSTALS-Kyber)")
+	torCmd.Flags().String("pq-password", "", "password for post-quantum encryption (allows decryption later)")
 	torCmd.Flags().Int("rotate-circuit", 0, "auto-rotate circuit every N minutes (0 = disabled)")
 	torCmd.Flags().Int("decoy-traffic", 0, "generate N% decoy traffic to frustrate analysis (0-100)")
 	torCmd.Flags().Bool("stego", false, "steganography mode - traffic looks like YouTube/Netflix")
@@ -172,6 +180,11 @@ func init() {
 
 	aiCmd.AddCommand(aiStatsCmd, aiResetCmd, aiBypassCmd, aiSensitiveCmd, aiTestCmd)
 
+	// Decrypt command flags
+	decryptCmd.Flags().StringP("file", "f", "/var/lib/torforge/session_stats.enc", "encrypted file to decrypt")
+	decryptCmd.Flags().StringP("password", "p", "", "password used for encryption (required)")
+	decryptCmd.MarkFlagRequired("password")
+
 	// Add commands
 	rootCmd.AddCommand(torCmd)
 	rootCmd.AddCommand(statusCmd)
@@ -181,6 +194,7 @@ func init() {
 	rootCmd.AddCommand(installCmd)
 	rootCmd.AddCommand(appCmd)
 	rootCmd.AddCommand(aiCmd)
+	rootCmd.AddCommand(decryptCmd)
 
 	// Short flags on root
 	rootCmd.Flags().Bool("tor", false, "alias for 'torforge tor'")
@@ -289,6 +303,16 @@ func runTor(cmd *cobra.Command, args []string) error {
 			status := p.GetQuantumStatus()
 			fmt.Println("   🔐 Post-Quantum: CRYSTALS-Kyber768 ACTIVE")
 			fmt.Printf("   📊 NIST Level: %v | Key ID: %v\n", status["nist_level"], status["key_id"])
+
+			// Set password for persistent file encryption
+			pqPassword, _ := cmd.Flags().GetString("pq-password")
+			if pqPassword != "" {
+				if err := p.SetQuantumPassword(pqPassword); err != nil {
+					log.Warn().Err(err).Msg("failed to set post-quantum password")
+				} else {
+					fmt.Println("   🔑 Password encryption: ENABLED (files can be decrypted later)")
+				}
+			}
 		}
 	}
 	if autoBridge {
@@ -405,6 +429,7 @@ func runTor(cmd *cobra.Command, args []string) error {
 						} else {
 							// Get new exit IP
 							if newIP, err := torMgr.GetExitIP(); err == nil {
+								exitIP = newIP // Update tracked exit IP
 								log.Info().
 									Str("new_exit_ip", newIP).
 									Int("rotation", rotationCount).
@@ -452,6 +477,44 @@ func runTor(cmd *cobra.Command, args []string) error {
 
 	// Cleanup
 	log.Info().Msg("stopping proxy")
+
+	// Save encrypted session data if post-quantum is enabled
+	if status := p.GetQuantumStatus(); status["enabled"] == true {
+		// Collect meaningful session data for encrypted storage
+		sessionData := map[string]interface{}{
+			"shutdown_time": time.Now().Format(time.RFC3339),
+			"session_start": time.Now().Add(-time.Since(time.Now())).Format(time.RFC3339),
+		}
+
+		// Get exit IP used (already fetched during startup)
+		if exitIP != "" && exitIP != "(connecting...)" {
+			sessionData["last_exit_ip"] = exitIP
+		}
+
+		// Get AI recommendation data if available
+		if circuitAI := p.GetCircuitAI(); circuitAI != nil {
+			if rec := circuitAI.GetExitRecommendations(); rec != nil {
+				sessionData["ai_data"] = map[string]interface{}{
+					"preferred_exits": len(rec.PreferredExits),
+					"avoided_exits":   len(rec.AvoidExits),
+					"confidence":      rec.Confidence,
+				}
+			}
+		}
+
+		// Serialize and encrypt
+		jsonData, _ := json.Marshal(sessionData)
+		statsFile := "/var/lib/torforge/session_stats.enc"
+		if err := p.SaveEncryptedFile(statsFile, jsonData); err != nil {
+			log.Warn().Err(err).Msg("failed to save encrypted session stats")
+		} else {
+			log.Info().
+				Str("file", statsFile).
+				Int("data_size", len(jsonData)).
+				Msg("🔐 Session stats saved with post-quantum encryption")
+		}
+	}
+
 	if err := p.Stop(); err != nil {
 		log.Error().Err(err).Msg("error during shutdown")
 	}
@@ -1093,4 +1156,36 @@ func computeQuality(latencyMs, bandwidthKbps float64, success bool) float64 {
 		return 0.0
 	}
 	return 0.7*normalizeLatency(latencyMs) + 0.3*normalizeBandwidth(bandwidthKbps)
+}
+
+func runDecrypt(cmd *cobra.Command, args []string) error {
+	filePath, _ := cmd.Flags().GetString("file")
+	password, _ := cmd.Flags().GetString("password")
+
+	if password == "" {
+		return fmt.Errorf("password is required (use --password or -p)")
+	}
+
+	// Read encrypted file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file %s: %w", filePath, err)
+	}
+
+	fmt.Printf("🔐 Decrypting: %s\n", filePath)
+	fmt.Printf("   File size: %d bytes\n", len(data))
+	fmt.Println("   Deriving key with Argon2id (64MB memory)...")
+
+	// Decrypt using the security package
+	plaintext, err := security.DecryptFileWithPassword(data, password)
+	if err != nil {
+		return fmt.Errorf("decryption failed: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Println("✅ Decryption successful!")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println(string(plaintext))
+
+	return nil
 }

@@ -12,12 +12,23 @@ import (
 
 	"github.com/cloudflare/circl/kem/kyber/kyber768"
 	"github.com/jery0843/torforge/pkg/logger"
+	"golang.org/x/crypto/argon2"
+)
+
+// Argon2id parameters (OWASP recommended for password hashing)
+const (
+	argon2Time    = 3         // Number of iterations
+	argon2Memory  = 64 * 1024 // 64 MB memory
+	argon2Threads = 4         // Parallelism
+	argon2KeyLen  = 32        // 256-bit key
+	saltSize      = 16        // 128-bit salt
 )
 
 // PostQuantumConfig configures the post-quantum encryption layer
 type PostQuantumConfig struct {
 	Enabled   bool   `yaml:"enabled"`
 	Algorithm string `yaml:"algorithm"` // "kyber768"
+	Password  string `yaml:"password"`  // Password for persistent file encryption
 }
 
 // QuantumResistantLayer provides an additional encryption layer
@@ -37,6 +48,12 @@ type QuantumResistantLayer struct {
 	// Shared secret for symmetric encryption
 	sharedSecret []byte
 	cipher       cipher.AEAD
+
+	// Password-derived cipher for persistent file encryption
+	passwordSet    bool
+	passwordSalt   []byte // Random salt for Argon2id
+	passwordRaw    string // Raw password for key re-derivation on decrypt
+	passwordCipher cipher.AEAD
 }
 
 // NewQuantumResistantLayer creates a new post-quantum encryption layer
@@ -108,6 +125,142 @@ func (q *QuantumResistantLayer) generateKyberKeyPair() error {
 	}
 
 	return nil
+}
+
+// SetPassword sets a password for persistent file encryption
+// This allows encrypted files to be decrypted later with the same password
+// Uses Argon2id (OWASP recommended) for key derivation
+func (q *QuantumResistantLayer) SetPassword(password string) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if password == "" {
+		q.passwordSet = false
+		q.passwordSalt = nil
+		q.passwordCipher = nil
+		return nil
+	}
+
+	log := logger.WithComponent("quantum")
+
+	// Generate random salt for Argon2id
+	salt := make([]byte, saltSize)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return fmt.Errorf("failed to generate salt: %w", err)
+	}
+
+	// Derive 256-bit key using Argon2id (memory-hard, resistant to GPU/ASIC attacks)
+	key := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return err
+	}
+
+	q.passwordCipher, err = cipher.NewGCM(block)
+	if err != nil {
+		return err
+	}
+
+	q.passwordSalt = salt
+	q.passwordRaw = password
+	q.passwordSet = true
+
+	log.Info().
+		Int("memory_mb", argon2Memory/1024).
+		Int("iterations", argon2Time).
+		Msg("🔑 Argon2id password encryption enabled for persistent files")
+
+	return nil
+}
+
+// deriveKeyFromPassword derives AES key from password using stored salt
+func deriveKeyFromPassword(password string, salt []byte) []byte {
+	return argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+}
+
+// EncryptWithPassword encrypts data using the password-derived key
+// Format: [16-byte salt][12-byte nonce][ciphertext+tag]
+func (q *QuantumResistantLayer) EncryptWithPassword(plaintext []byte) ([]byte, error) {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	if !q.passwordSet || q.passwordCipher == nil || q.passwordSalt == nil {
+		// Fall back to Kyber encryption if no password set
+		return q.Encrypt(plaintext)
+	}
+
+	nonce := make([]byte, q.passwordCipher.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+
+	// Prepend salt so decryption can re-derive the key
+	ciphertext := q.passwordCipher.Seal(nonce, nonce, plaintext, nil)
+	result := make([]byte, 0, len(q.passwordSalt)+len(ciphertext))
+	result = append(result, q.passwordSalt...)
+	result = append(result, ciphertext...)
+	return result, nil
+}
+
+// DecryptWithPassword decrypts data using the password-derived key
+// Expects format: [16-byte salt][12-byte nonce][ciphertext+tag]
+func (q *QuantumResistantLayer) DecryptWithPassword(data []byte) ([]byte, error) {
+	q.mu.RLock()
+	password := q.passwordSet
+	q.mu.RUnlock()
+
+	if !password {
+		return nil, fmt.Errorf("password not set - cannot decrypt")
+	}
+
+	// Extract salt from beginning of data
+	if len(data) < saltSize {
+		return nil, fmt.Errorf("data too short: missing salt")
+	}
+	salt := data[:saltSize]
+	ciphertext := data[saltSize:]
+
+	// Re-derive key from password and extracted salt
+	key := deriveKeyFromPassword(q.getPasswordForDecrypt(), salt)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ciphertext) < aesgcm.NonceSize() {
+		return nil, fmt.Errorf("ciphertext too short: missing nonce")
+	}
+
+	nonce := ciphertext[:aesgcm.NonceSize()]
+	encrypted := ciphertext[aesgcm.NonceSize():]
+
+	plaintext, err := aesgcm.Open(nil, nonce, encrypted, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decryption failed: %w", err)
+	}
+
+	return plaintext, nil
+}
+
+// getPasswordForDecrypt returns the stored password for key re-derivation
+func (q *QuantumResistantLayer) getPasswordForDecrypt() string {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return q.passwordRaw
+}
+
+// HasPassword returns whether a password is set
+func (q *QuantumResistantLayer) HasPassword() bool {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return q.passwordSet
 }
 
 // compareBytes compares two byte slices in constant time
@@ -224,4 +377,44 @@ func (q *QuantumResistantLayer) TestEncryption() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// DecryptFileWithPassword decrypts data that was encrypted with EncryptWithPassword
+// This is a standalone function for CLI usage - doesn't require an existing QuantumResistantLayer
+func DecryptFileWithPassword(data []byte, password string) ([]byte, error) {
+	if len(data) < saltSize+12+16 {
+		return nil, fmt.Errorf("data too short: expected at least %d bytes", saltSize+12+16)
+	}
+
+	// Extract salt
+	salt := data[:saltSize]
+	ciphertext := data[saltSize:]
+
+	// Derive key using Argon2id
+	key := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+
+	// Create AES-256-GCM cipher
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	if len(ciphertext) < aesgcm.NonceSize() {
+		return nil, fmt.Errorf("ciphertext too short for nonce")
+	}
+
+	nonce := ciphertext[:aesgcm.NonceSize()]
+	encrypted := ciphertext[aesgcm.NonceSize():]
+
+	plaintext, err := aesgcm.Open(nil, nonce, encrypted, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decryption failed (wrong password?): %w", err)
+	}
+
+	return plaintext, nil
 }

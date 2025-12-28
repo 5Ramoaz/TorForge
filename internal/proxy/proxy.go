@@ -4,6 +4,7 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -503,5 +504,67 @@ func (p *Proxy) DecryptData(data []byte) ([]byte, error) {
 	if p.quantumLayer == nil || !p.quantumLayer.IsEnabled() {
 		return data, nil
 	}
+	return p.quantumLayer.Decrypt(data)
+}
+
+// SetQuantumPassword sets the password for post-quantum file encryption
+func (p *Proxy) SetQuantumPassword(password string) error {
+	if p.quantumLayer == nil {
+		return fmt.Errorf("quantum layer not initialized")
+	}
+	return p.quantumLayer.SetPassword(password)
+}
+
+// SaveEncryptedFile saves data to a file with password-based post-quantum encryption
+func (p *Proxy) SaveEncryptedFile(filename string, data []byte) error {
+	log := logger.WithComponent("quantum")
+
+	if p.quantumLayer == nil || !p.quantumLayer.IsEnabled() {
+		return os.WriteFile(filename, data, 0600)
+	}
+
+	// Use password-based encryption if password is set
+	var encrypted []byte
+	var err error
+	if p.quantumLayer.HasPassword() {
+		encrypted, err = p.quantumLayer.EncryptWithPassword(data)
+	} else {
+		encrypted, err = p.quantumLayer.Encrypt(data)
+	}
+
+	if err != nil {
+		return fmt.Errorf("encryption failed: %w", err)
+	}
+
+	if err := os.WriteFile(filename, encrypted, 0600); err != nil {
+		return err
+	}
+
+	log.Debug().
+		Str("file", filename).
+		Int("original_size", len(data)).
+		Int("encrypted_size", len(encrypted)).
+		Bool("password_protected", p.quantumLayer.HasPassword()).
+		Msg("🔐 Saved with post-quantum encryption")
+
+	return nil
+}
+
+// LoadEncryptedFile loads data from a file with password-based post-quantum decryption
+func (p *Proxy) LoadEncryptedFile(filename string) ([]byte, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	if p.quantumLayer == nil || !p.quantumLayer.IsEnabled() {
+		return data, nil
+	}
+
+	// Use password-based decryption if password is set
+	if p.quantumLayer.HasPassword() {
+		return p.quantumLayer.DecryptWithPassword(data)
+	}
+
 	return p.quantumLayer.Decrypt(data)
 }
