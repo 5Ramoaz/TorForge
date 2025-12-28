@@ -39,6 +39,7 @@ TorForge is a transparent Tor proxy that routes all system traffic through the T
 | **IPv6 Routing** | IPv6 traffic routed through Tor (with kill switch) |
 | **ICMP Blocking** | Ping requests blocked to prevent leaks |
 | **Multi-Circuit** | Concurrent circuit support for better performance |
+| **Circuit Racing** | Race 5 circuits on startup, use fastest (`--race`) |
 | **Auto-Rotation** | Automatically change exit IP on schedule |
 
 ### 🔐 Advanced Security
@@ -247,6 +248,8 @@ sudo torforge tor [flags]
 | `--circuits` | `-n` | Number of concurrent circuits | 4 |
 | `--post-quantum` | | CRYSTALS-Kyber768 encryption | off |
 | `--rotate-circuit` | | Auto-rotate every N minutes | 0 |
+| `--race` | | Race circuits on startup, use fastest | off |
+| `--race-circuits` | | Number of circuits to race | 5 |
 | `--decoy-traffic` | | Generate N% fake traffic (0-100) | 0 |
 | `--stego` | | Steganography mode (mimic streaming) | off |
 | `--panic-key` | | Dead man's switch key (e.g., F12) | none |

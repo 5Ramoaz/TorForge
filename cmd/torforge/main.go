@@ -16,6 +16,7 @@ import (
 
 	"github.com/jery0843/torforge/internal/proxy"
 	"github.com/jery0843/torforge/internal/security"
+	"github.com/jery0843/torforge/internal/tor"
 	"github.com/jery0843/torforge/pkg/config"
 	"github.com/jery0843/torforge/pkg/logger"
 	"github.com/spf13/cobra"
@@ -117,6 +118,8 @@ func init() {
 	torCmd.Flags().Int("decoy-traffic", 0, "generate N% decoy traffic to frustrate analysis (0-100)")
 	torCmd.Flags().Bool("stego", false, "steganography mode - traffic looks like YouTube/Netflix")
 	torCmd.Flags().String("panic-key", "", "dead man's switch key (e.g., F12) for emergency shutdown")
+	torCmd.Flags().Bool("race", false, "race multiple circuits on startup, use fastest")
+	torCmd.Flags().Int("race-circuits", 5, "number of circuits to race (default: 5)")
 
 	// App proxy flags
 	appCmd := &cobra.Command{
@@ -253,6 +256,23 @@ func runTor(cmd *cobra.Command, args []string) error {
 	log.Info().Msg("starting transparent proxy")
 	if err := p.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start proxy: %w", err)
+	}
+
+	// Circuit Racing
+	raceEnabled, _ := cmd.Flags().GetBool("race")
+	raceCircuits, _ := cmd.Flags().GetInt("race-circuits")
+	if raceEnabled && raceCircuits > 0 {
+		if torMgr := p.GetTorManager(); torMgr != nil {
+			racer := tor.NewCircuitRacer(torMgr)
+			fmt.Printf("\n⚡ Circuit Racing: Testing %d circuits...\n", raceCircuits)
+			best, err := racer.RaceCircuits(raceCircuits)
+			if err != nil {
+				log.Warn().Err(err).Msg("circuit racing failed, using default circuit")
+			} else {
+				racer.PrintResults()
+				fmt.Printf("   🏆 Using fastest circuit (%dms latency)\n", best.Latency.Milliseconds())
+			}
+		}
 	}
 
 	// Show active features
