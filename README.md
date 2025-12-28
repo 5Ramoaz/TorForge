@@ -46,7 +46,7 @@ TorForge is a transparent Tor proxy that routes all system traffic through the T
 | Feature | Description |
 |---------|-------------|
 | **Post-Quantum Encryption** | CRYSTALS-Kyber768 encrypts locally saved data (ML weights, cache) |
-| **Steganography Mode** | Traffic mimics YouTube/Netflix streaming to defeat DPI |
+| **Steganography Mode** | Uses obfs4 transport with streaming-pattern headers |
 | **Decoy Traffic** | Injects fake requests to frustrate traffic analysis |
 | **Dead Man's Switch** | Panic key for instant emergency shutdown with trace wiping |
 
@@ -411,7 +411,7 @@ emergency exit - all connections terminated
 | IPv6 IP Leak | IPv6 routed through Tor (kill switch blocks leaks) |
 | ICMP Leak | Ping blocked |
 | DNS Leak | DNS forced through Tor |
-| Traffic Analysis | Decoy traffic + steganography |
+| Traffic Analysis | Decoy traffic + obfs4 obfuscation |
 | Quantum Attack | Post-quantum encryption |
 | Kill Switch Fail | Default DROP policy |
 | Emergency | Dead man's switch |
