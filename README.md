@@ -558,6 +558,15 @@ MIT License - See [LICENSE](LICENSE)
 | App bypass | ✅ Kernel-level capture |
 | Kill switch bypass | ✅ Default DROP |
 
+### VPN + TorForge
+
+| Order | Works? | What Happens |
+|-------|--------|--------------|
+| **VPN first, then TorForge** | ✅ Yes | ISP sees VPN → VPN sees Tor |
+| **TorForge first, then VPN** | ❌ No | TorForge captures VPN traffic |
+
+To use with VPN: Connect to VPN first, then start TorForge.
+
 ---
 
 ## ⚠️ Legal Disclaimer
