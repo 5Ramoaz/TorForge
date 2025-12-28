@@ -137,8 +137,11 @@ func (m *Manager) generateTorrcForBine() string {
 	var torrc string
 
 	torrc += fmt.Sprintf("SocksPort 127.0.0.1:%d\n", m.cfg.SOCKSPort)
+	torrc += fmt.Sprintf("SocksPort [::1]:%d\n", m.cfg.SOCKSPort) // IPv6 SOCKS
 	torrc += fmt.Sprintf("TransPort 127.0.0.1:%d\n", m.cfg.TransPort)
+	torrc += fmt.Sprintf("TransPort [::1]:%d\n", m.cfg.TransPort) // IPv6 TransPort
 	torrc += fmt.Sprintf("DNSPort 127.0.0.1:%d\n", m.cfg.DNSPort)
+	torrc += fmt.Sprintf("DNSPort [::1]:%d\n", m.cfg.DNSPort) // IPv6 DNS
 	// NOTE: Don't set ControlPort here - bine handles it automatically
 	torrc += "DataDirectory " + m.cfg.DataDir + "\n"
 	torrc += "SafeLogging 0\n"

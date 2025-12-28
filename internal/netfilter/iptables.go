@@ -94,9 +94,9 @@ func (m *IPTablesManager) Apply() error {
 		return fmt.Errorf("failed to apply filter rules: %w", err)
 	}
 
-	// Block IPv6 traffic (Tor doesn't support IPv6 transparent proxy)
-	if err := m.blockIPv6(); err != nil {
-		log.Warn().Err(err).Msg("failed to block IPv6 (may leak)")
+	// Route IPv6 traffic through Tor (instead of blocking)
+	if err := m.routeIPv6(); err != nil {
+		log.Warn().Err(err).Msg("failed to route IPv6 (may not work for IPv6 destinations)")
 	}
 
 	m.active = true
@@ -419,7 +419,7 @@ func (m *IPTablesManager) Rollback() error {
 	m.active = false
 
 	// Restore IPv6 traffic
-	m.unblockIPv6()
+	m.cleanupIPv6()
 
 	log.Info().Msg("iptables rules rolled back")
 	logger.Audit("iptables").Str("action", "rollback").Msg("iptables rules deactivated")
@@ -434,8 +434,8 @@ func (m *IPTablesManager) IsActive() bool {
 	return m.active
 }
 
-// blockIPv6 blocks all IPv6 traffic to prevent leaks
-func (m *IPTablesManager) blockIPv6() error {
+// routeIPv6 routes all IPv6 traffic through Tor (instead of blocking)
+func (m *IPTablesManager) routeIPv6() error {
 	log := logger.WithComponent("iptables")
 
 	// Check if ip6tables is available
@@ -443,45 +443,94 @@ func (m *IPTablesManager) blockIPv6() error {
 		return fmt.Errorf("ip6tables not found: %w", err)
 	}
 
-	// Create TORFORGE_IPV6 chain
-	exec.Command("ip6tables", "-N", "TORFORGE_IPV6").Run()
+	// Create TORFORGE_IPV6 chain for NAT
+	exec.Command("ip6tables", "-t", "nat", "-N", "TORFORGE_IPV6").Run()
 
-	// Allow loopback
-	if err := exec.Command("ip6tables", "-A", "TORFORGE_IPV6", "-o", "lo", "-j", "ACCEPT").Run(); err != nil {
+	// Allow loopback (essential for Tor listening on [::1])
+	if err := exec.Command("ip6tables", "-t", "nat", "-A", "TORFORGE_IPV6", "-o", "lo", "-j", "RETURN").Run(); err != nil {
 		log.Debug().Err(err).Msg("ip6tables loopback rule")
 	}
 
-	// Allow established connections (for graceful handling)
-	if err := exec.Command("ip6tables", "-A", "TORFORGE_IPV6", "-m", "state", "--state", "ESTABLISHED,RELATED", "-j", "ACCEPT").Run(); err != nil {
-		log.Debug().Err(err).Msg("ip6tables established rule")
+	// Bypass root/Tor process traffic (prevents loops)
+	if err := exec.Command("ip6tables", "-t", "nat", "-A", "TORFORGE_IPV6", "-m", "owner", "--uid-owner", "0", "-j", "RETURN").Run(); err != nil {
+		log.Debug().Err(err).Msg("ip6tables root bypass rule")
 	}
 
-	// DROP all other IPv6 traffic
-	if err := exec.Command("ip6tables", "-A", "TORFORGE_IPV6", "-j", "DROP").Run(); err != nil {
-		return fmt.Errorf("failed to add IPv6 DROP rule: %w", err)
+	// Get Tor UID if using system Tor
+	if m.torUID > 0 {
+		if err := exec.Command("ip6tables", "-t", "nat", "-A", "TORFORGE_IPV6", "-m", "owner", "--uid-owner", strconv.Itoa(m.torUID), "-j", "RETURN").Run(); err != nil {
+			log.Debug().Err(err).Msg("ip6tables tor user bypass rule")
+		}
 	}
 
-	// Add chain to OUTPUT
-	if err := exec.Command("ip6tables", "-I", "OUTPUT", "1", "-j", "TORFORGE_IPV6").Run(); err != nil {
+	// Redirect IPv6 DNS (UDP port 53) to Tor DNSPort on [::1]
+	dnsPort := strconv.Itoa(m.torCfg.DNSPort)
+	if err := exec.Command("ip6tables", "-t", "nat", "-A", "OUTPUT", "-p", "udp", "--dport", "53", "-j", "REDIRECT", "--to-ports", dnsPort).Run(); err != nil {
+		log.Warn().Err(err).Msg("failed to add IPv6 DNS redirect rule")
+	}
+
+	// Redirect IPv6 TCP to Tor TransPort on [::1]
+	transPort := strconv.Itoa(m.torCfg.TransPort)
+	if err := exec.Command("ip6tables", "-t", "nat", "-A", "TORFORGE_IPV6", "-p", "tcp", "-j", "REDIRECT", "--to-ports", transPort).Run(); err != nil {
+		return fmt.Errorf("failed to add IPv6 TCP redirect rule: %w", err)
+	}
+
+	// Add NAT chain to OUTPUT
+	if err := exec.Command("ip6tables", "-t", "nat", "-I", "OUTPUT", "1", "-j", "TORFORGE_IPV6").Run(); err != nil {
 		return fmt.Errorf("failed to add TORFORGE_IPV6 chain to OUTPUT: %w", err)
 	}
 
-	log.Info().Msg("IPv6 traffic blocked")
+	// Create filter chain for kill switch
+	exec.Command("ip6tables", "-N", "TORFORGE_IPV6_FILTER").Run()
+
+	// Allow loopback in filter
+	exec.Command("ip6tables", "-A", "TORFORGE_IPV6_FILTER", "-o", "lo", "-j", "ACCEPT").Run()
+
+	// Allow established connections
+	exec.Command("ip6tables", "-A", "TORFORGE_IPV6_FILTER", "-m", "state", "--state", "ESTABLISHED,RELATED", "-j", "ACCEPT").Run()
+
+	// Allow root (Tor process)
+	exec.Command("ip6tables", "-A", "TORFORGE_IPV6_FILTER", "-m", "owner", "--uid-owner", "0", "-j", "ACCEPT").Run()
+
+	if m.torUID > 0 {
+		exec.Command("ip6tables", "-A", "TORFORGE_IPV6_FILTER", "-m", "owner", "--uid-owner", strconv.Itoa(m.torUID), "-j", "ACCEPT").Run()
+	}
+
+	// DROP all other IPv6 traffic (kill switch)
+	if err := exec.Command("ip6tables", "-A", "TORFORGE_IPV6_FILTER", "-j", "DROP").Run(); err != nil {
+		log.Warn().Err(err).Msg("failed to add IPv6 DROP rule")
+	}
+
+	// Add filter chain to OUTPUT
+	exec.Command("ip6tables", "-I", "OUTPUT", "1", "-j", "TORFORGE_IPV6_FILTER").Run()
+
+	log.Info().Msg("🌐 IPv6 traffic routed through Tor")
 	return nil
 }
 
-// unblockIPv6 removes IPv6 blocking rules
-func (m *IPTablesManager) unblockIPv6() {
+// cleanupIPv6 removes IPv6 routing rules (cleanup for routeIPv6)
+func (m *IPTablesManager) cleanupIPv6() {
 	log := logger.WithComponent("iptables")
 
-	// Remove chain from OUTPUT
-	exec.Command("ip6tables", "-D", "OUTPUT", "-j", "TORFORGE_IPV6").Run()
+	// Remove NAT chain from OUTPUT
+	exec.Command("ip6tables", "-t", "nat", "-D", "OUTPUT", "-j", "TORFORGE_IPV6").Run()
 
-	// Flush and delete chain
-	exec.Command("ip6tables", "-F", "TORFORGE_IPV6").Run()
-	exec.Command("ip6tables", "-X", "TORFORGE_IPV6").Run()
+	// Remove DNS redirect rule
+	dnsPort := strconv.Itoa(m.torCfg.DNSPort)
+	exec.Command("ip6tables", "-t", "nat", "-D", "OUTPUT", "-p", "udp", "--dport", "53", "-j", "REDIRECT", "--to-ports", dnsPort).Run()
 
-	log.Info().Msg("IPv6 traffic restored")
+	// Flush and delete NAT chain
+	exec.Command("ip6tables", "-t", "nat", "-F", "TORFORGE_IPV6").Run()
+	exec.Command("ip6tables", "-t", "nat", "-X", "TORFORGE_IPV6").Run()
+
+	// Remove filter chain from OUTPUT
+	exec.Command("ip6tables", "-D", "OUTPUT", "-j", "TORFORGE_IPV6_FILTER").Run()
+
+	// Flush and delete filter chain
+	exec.Command("ip6tables", "-F", "TORFORGE_IPV6_FILTER").Run()
+	exec.Command("ip6tables", "-X", "TORFORGE_IPV6_FILTER").Run()
+
+	log.Info().Msg("IPv6 routing restored")
 }
 
 func (m *IPTablesManager) backupRules() error {
