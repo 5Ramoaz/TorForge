@@ -7,7 +7,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux-orange.svg)](https://linux.org)
-[![Lines of Code](https://img.shields.io/badge/Lines-10,000+-blue.svg)]()
+
 [![Speed](https://img.shields.io/badge/Speed-20Mbps+-brightgreen.svg)]()
 
 *Route all system traffic through Tor with military-grade security features*
@@ -22,7 +22,7 @@ TorForge is a transparent Tor proxy that routes all system traffic through the T
 
 ### Key Highlights
 - **Zero-config transparent proxying** - Works with any application
-- **10,000+ lines of Go** - Quality codebase
+- **Pure Go codebase** - No external ML dependencies
 - **10 internal packages** - Modular architecture
 - **AI-powered optimization** - Smart circuit selection and split-tunneling
 - **Post-quantum ready** - CRYSTALS-Kyber768 encryption
